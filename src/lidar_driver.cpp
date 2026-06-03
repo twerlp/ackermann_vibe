@@ -1,5 +1,6 @@
 #include "ackermann_rover/lidar_driver.hpp"
 #include <cmath>
+#include <sstream>
 
 namespace ackermann_rover
 {
@@ -24,6 +25,9 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
   declare_parameter("num_samples", 360);
   declare_parameter("frame_id", "lidar_link");
   declare_parameter("simulated", true);
+  declare_parameter("map_file", "");
+  declare_parameter("lidar_offset_x", 0.65);
+  declare_parameter("lidar_offset_y", 0.0);
 
   serial_port_ = get_parameter("serial_port").as_string();
   baud_rate_ = get_parameter("baud_rate").as_int();
@@ -35,6 +39,9 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
   num_samples_ = get_parameter("num_samples").as_int();
   frame_id_ = get_parameter("frame_id").as_string();
   simulated_ = get_parameter("simulated").as_bool();
+  map_file_ = get_parameter("map_file").as_string();
+  lidar_offset_x_ = get_parameter("lidar_offset_x").as_double();
+  lidar_offset_y_ = get_parameter("lidar_offset_y").as_double();
 
   angle_increment_ = (angle_max_ - angle_min_) / num_samples_;
 
@@ -49,8 +56,12 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
       "odom", rclcpp::QoS(10).reliable(),
       std::bind(&LidarDriver::odomCallback, this, std::placeholders::_1));
 
-    buildGymMap();
-    RCLCPP_WARN(get_logger(), "LiDAR running in simulated gym mode with %zu obstacles",
+    if (!map_file_.empty()) {
+      loadSegmentsFromFile(map_file_);
+    } else {
+      buildDefaultGymMap();
+    }
+    RCLCPP_WARN(get_logger(), "LiDAR running in simulated mode with %zu obstacles",
       obstacles_.size());
   }
 
@@ -66,6 +77,9 @@ CallbackReturn LidarDriver::on_activate(const rclcpp_lifecycle::State &)
   if (simulated_) {
     marker_pub_->on_activate();
     publishObstacleMarkers();
+    marker_timer_ = create_wall_timer(
+      std::chrono::seconds(5),
+      std::bind(&LidarDriver::publishObstacleMarkers, this));
   }
 
   if (!simulated_) {
@@ -123,7 +137,7 @@ void LidarDriver::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
   has_odom_ = true;
 }
 
-void LidarDriver::buildGymMap()
+void LidarDriver::buildDefaultGymMap()
 {
   const double X = 4.0, Y = 4.0;
   obstacles_.clear();
@@ -230,6 +244,28 @@ void LidarDriver::readLidarData()
   scan_pub_->publish(scan);
 }
 
+void LidarDriver::loadSegmentsFromFile(const std::string & path)
+{
+  obstacles_.clear();
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    RCLCPP_ERROR(get_logger(), "Cannot open map file: %s", path.c_str());
+    return;
+  }
+  std::string line;
+  int count = 0;
+  while (std::getline(file, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream iss(line);
+    double x1, y1, x2, y2;
+    if (iss >> x1 >> y1 >> x2 >> y2) {
+      obstacles_.push_back({x1, y1, x2, y2});
+      ++count;
+    }
+  }
+  RCLCPP_INFO(get_logger(), "Loaded %d segments from %s", count, path.c_str());
+}
+
 void LidarDriver::publishObstacleMarkers()
 {
   auto markers = visualization_msgs::msg::MarkerArray();
@@ -245,14 +281,18 @@ void LidarDriver::publishObstacleMarkers()
     m.type = visualization_msgs::msg::Marker::CUBE;
     m.action = visualization_msgs::msg::Marker::ADD;
 
+    double dx = s.x2 - s.x1;
+    double dy = s.y2 - s.y1;
     double cx = (s.x1 + s.x2) / 2.0;
     double cy = (s.y1 + s.y2) / 2.0;
-    double len = std::hypot(s.x2 - s.x1, s.y2 - s.y1);
+    double len = std::hypot(dx, dy);
+    double yaw = std::atan2(dy, dx);
 
     m.pose.position.x = cx;
     m.pose.position.y = cy;
     m.pose.position.z = 0.25;
-    m.pose.orientation.w = 1.0;
+    m.pose.orientation.z = std::sin(yaw * 0.5);
+    m.pose.orientation.w = std::cos(yaw * 0.5);
     m.scale.x = (len > 0.05) ? len : 0.05;
     m.scale.y = 0.05;
     m.scale.z = 0.5;
@@ -260,7 +300,7 @@ void LidarDriver::publishObstacleMarkers()
     m.color.g = 0.4f;
     m.color.b = 0.2f;
     m.color.a = 0.9f;
-    m.lifetime.sec = 5;
+    m.lifetime.nanosec = 0;  // zero = permanent, never auto-delete
 
     markers.markers.push_back(m);
   }

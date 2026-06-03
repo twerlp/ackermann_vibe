@@ -9,6 +9,7 @@
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <string>
 #include <vector>
+#include <fstream>
 
 using LifecycleNode = rclcpp_lifecycle::LifecycleNode;
 using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -41,6 +42,7 @@ private:
   double raySegmentIntersect(double ox, double oy, double dx, double dy,
                               double x1, double y1, double x2, double y2) const;
   void publishObstacleMarkers();
+  void loadSegmentsFromFile(const std::string & path);
 
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>> scan_pub_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<visualization_msgs::msg::MarkerArray>> marker_pub_;
@@ -60,6 +62,7 @@ private:
   float angle_increment_;
   int num_samples_;
   std::string frame_id_;
+  std::string map_file_;
   bool simulated_;
 
   double odom_x_, odom_y_, odom_theta_;

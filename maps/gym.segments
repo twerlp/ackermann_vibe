@@ -1,0 +1,26 @@
+# Gym map: 8x8m room with 3 internal obstacles
+# Format: x1 y1 x2 y2
+# Must match buildGymMap() in lidar_driver.cpp and _make_gym_obstacles() in rover_visualizer.py
+# Outer walls
+-4.0 -4.0 4.0 -4.0
+4.0 -4.0 4.0 4.0
+4.0 4.0 -4.0 4.0
+-4.0 4.0 -4.0 -4.0
+# Box at (2, 2), 1x0.6m
+1.7 1.7 2.7 1.7
+2.7 1.7 2.7 2.3
+2.7 2.3 1.7 2.3
+1.7 2.3 1.7 1.7
+# Box at (-2, -2.5), 1.2x0.8m
+-2.6 -2.9 -1.4 -2.9
+-1.4 -2.9 -1.4 -2.1
+-1.4 -2.1 -2.6 -2.1
+-2.6 -2.1 -2.6 -2.9
+# Small box at (0.5, -1), 0.6x0.4m
+0.2 -1.2 0.8 -1.2
+0.8 -1.2 0.8 -0.8
+0.8 -0.8 0.2 -0.8
+0.2 -0.8 0.2 -1.2
+# Vertical barrier at x=-0.2 (two segments with gap)
+-0.2 -1.5 -0.2 0.5
+-0.2 2.0 -0.2 3.5

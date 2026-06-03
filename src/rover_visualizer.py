@@ -11,6 +11,7 @@ Usage:
   ros2 run ackermann_rover rover_visualizer
 """
 import math
+import os
 import numpy as np
 import rclpy
 from rclpy.node import Node
@@ -25,36 +26,26 @@ from collections import deque
 import threading
 
 
-def _make_gym_obstacles():
-    X, Y = 4.0, 4.0
+def _load_segments(path):
+    """Load obstacle segments from .segments file (x1 y1 x2 y2 per line, # comments)."""
+    if not path:
+        return []
     segs = []
-    # Outer walls
-    segs.append(((-X, -Y), ( X, -Y)))
-    segs.append((( X, -Y), ( X,  Y)))
-    segs.append((( X,  Y), (-X,  Y)))
-    segs.append(((-X,  Y), (-X, -Y)))
-    # Box at (2, 2), 1x0.6
-    segs.append(((1.7, 1.7), (2.7, 1.7)))
-    segs.append(((2.7, 1.7), (2.7, 2.3)))
-    segs.append(((2.7, 2.3), (1.7, 2.3)))
-    segs.append(((1.7, 2.3), (1.7, 1.7)))
-    # Box at (-2, -2.5), 1.2x0.8
-    segs.append(((-2.6, -2.9), (-1.4, -2.9)))
-    segs.append(((-1.4, -2.9), (-1.4, -2.1)))
-    segs.append(((-1.4, -2.1), (-2.6, -2.1)))
-    segs.append(((-2.6, -2.1), (-2.6, -2.9)))
-    # Small box at (0.5, -1), 0.6x0.4
-    segs.append(((0.2, -1.2), (0.8, -1.2)))
-    segs.append(((0.8, -1.2), (0.8, -0.8)))
-    segs.append(((0.8, -0.8), (0.2, -0.8)))
-    segs.append(((0.2, -0.8), (0.2, -1.2)))
-    # Vertical barrier at x=-0.2 (two segments with gap)
-    segs.append(((-0.2, -1.5), (-0.2,  0.5)))
-    segs.append(((-0.2,  2.0), (-0.2,  3.5)))
-    return segs
-
-
-_GYM_OBSTACLES = _make_gym_obstacles()
+    try:
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                if len(parts) >= 4:
+                    segs.append(((float(parts[0]), float(parts[1])),
+                                 (float(parts[2]), float(parts[3]))))
+        print(f"  [visualizer] loaded {len(segs)} segments from {path}")
+        return segs
+    except Exception as e:
+        print(f"  [visualizer] failed to load map {path}: {e}")
+        return []
 
 
 class RoverVisualizer(Node):
@@ -67,6 +58,7 @@ class RoverVisualizer(Node):
         self.declare_parameter('chassis_width', 0.9)
         self.declare_parameter('wheel_radius', 0.15)
         self.declare_parameter('max_steering_angle', 0.52)
+        self.declare_parameter('map_file', '')
 
         self.wheelbase = self.get_parameter('wheelbase').value
         self.track = self.get_parameter('track_width').value
@@ -74,6 +66,8 @@ class RoverVisualizer(Node):
         self.chassis_w = self.get_parameter('chassis_width').value
         self.wheel_r = self.get_parameter('wheel_radius').value
         self.max_steer = self.get_parameter('max_steering_angle').value
+        map_file = self.get_parameter('map_file').value
+        self.obstacles = _load_segments(map_file) if map_file else []
 
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -168,8 +162,7 @@ class RoverVisualizer(Node):
                 self.get_logger().info(
                     f"[visualizer] odom#{self._odom_msg_count} "
                     f"pos=({odom_x:.3f}, {odom_y:.3f}) theta={odom_theta:.3f} "
-                    f"traj={len(self.trajectory)} scan={len(self.scan_ranges)}",
-                    throttle_duration_sec=1.0)
+                    f"traj={len(self.trajectory)} scan={len(self.scan_ranges)}")
                 self._last_log_time = now
 
             self._draw_trajectory()
@@ -194,7 +187,7 @@ class RoverVisualizer(Node):
         self.ax.plot(xs, ys, color='cyan', linewidth=1.0, alpha=0.5)
 
     def _draw_obstacles(self):
-        for (x1, y1), (x2, y2) in _GYM_OBSTACLES:
+        for (x1, y1), (x2, y2) in self.obstacles:
             self.ax.plot([x1, x2], [y1, y2], color='#6B4226', linewidth=3, alpha=0.7, zorder=5)
 
     def _draw_lidar_scans(self, cx, cy, theta):

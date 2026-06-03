@@ -7,6 +7,7 @@ Usage:
   ros2 launch ackermann_rover ackermann_rover.launch.py simulated:=false
   ros2 launch ackermann_rover ackermann_rover.launch.py rviz:=true
   ros2 launch ackermann_rover ackermann_rover.launch.py visualizer:=true
+  ros2 launch ackermann_rover ackermann_rover.launch.py map_file:=/path/to/my_map.segments
 """
 import os
 
@@ -42,6 +43,11 @@ def generate_launch_description() -> LaunchDescription:
     simulated = LaunchConfiguration("simulated", default="true")
     use_rviz = LaunchConfiguration("rviz", default="false")
     use_visualizer = LaunchConfiguration("visualizer", default="true")
+    pkg_name = "ackermann_rover"
+    share = get_package_share_directory(pkg_name)
+    default_map = os.path.join(share, "maps", "gym.segments")
+
+    map_file = LaunchConfiguration("map_file", default=default_map)
 
     sim_arg = DeclareLaunchArgument(
         "simulated", default_value="true",
@@ -55,8 +61,9 @@ def generate_launch_description() -> LaunchDescription:
         "visualizer", default_value="true",
         description="Launch 2D matplotlib visualizer (lightweight, no GPU needed)")
 
-    pkg_name = "ackermann_rover"
-    share = get_package_share_directory(pkg_name)
+    map_arg = DeclareLaunchArgument(
+        "map_file", default_value=default_map,
+        description="Path to .segments map file")
 
     # ── Robot State Publisher (xacro → URDF → TF) ─────────────
     robot_state_pub = Node(
@@ -154,6 +161,7 @@ def generate_launch_description() -> LaunchDescription:
             "range_min": 0.12,
             "range_max": 12.0,
             "num_samples": 360,
+            "map_file": map_file,
         }],
     )
 
@@ -190,6 +198,7 @@ def generate_launch_description() -> LaunchDescription:
         name="rover_visualizer",
         condition=IfCondition(use_visualizer),
         output="screen",
+        parameters=[{"map_file": map_file}],
     )
 
     # ── Lifecycle transitions (configure then activate) ──────
@@ -203,6 +212,7 @@ def generate_launch_description() -> LaunchDescription:
         sim_arg,
         rviz_arg,
         viz_arg,
+        map_arg,
         robot_state_pub,
         joint_state_bootstrap,
         rover_controller,

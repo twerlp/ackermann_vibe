@@ -121,12 +121,16 @@ install(TARGETS
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib)
 
-# URDF model and RViz config
+# URDF model, RViz config, and map files
 install(DIRECTORY urdf DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY maps DESTINATION share/${PROJECT_NAME})
 install(FILES config/rover.rviz DESTINATION share/${PROJECT_NAME}/config)
 
 # 2D visualizer
 install(PROGRAMS src/rover_visualizer.py DESTINATION lib/${PROJECT_NAME})
+
+# Map editor
+install(PROGRAMS src/map_editor.py DESTINATION lib/${PROJECT_NAME})
 
 # Joint state bootstrap
 install(PROGRAMS src/joint_state_bootstrap.py DESTINATION lib/${PROJECT_NAME})
