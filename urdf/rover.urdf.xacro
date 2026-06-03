@@ -1,0 +1,182 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ackermann_rover">
+
+  <!-- ==================== Properties ======================== -->
+  <xacro:property name="PI" value="3.14159265358979"/>
+  <xacro:property name="wheel_radius" value="0.15"/>
+  <xacro:property name="wheel_width" value="0.06"/>
+  <xacro:property name="wheelbase" value="1.2"/>
+  <xacro:property name="front_track" value="0.8"/>
+  <xacro:property name="rear_track" value="0.8"/>
+  <xacro:property name="chassis_length" value="1.6"/>
+  <xacro:property name="chassis_width" value="0.9"/>
+  <xacro:property name="chassis_height" value="0.35"/>
+  <xacro:property name="chassis_mass" value="40.0"/>
+  <xacro:property name="wheel_mass" value="2.5"/>
+
+  <!-- ==================== Materials ========================= -->
+  <material name="body_blue"><color rgba="0.15 0.30 0.55 1.0"/></material>
+  <material name="dark_grey"><color rgba="0.2 0.2 0.2 1.0"/></material>
+  <material name="silver"><color rgba="0.7 0.7 0.7 1.0"/></material>
+  <material name="yellow"><color rgba="0.9 0.8 0.1 1.0"/></material>
+  <material name="red"><color rgba="0.9 0.1 0.1 1.0"/></material>
+  <material name="lidar_white"><color rgba="0.9 0.9 0.9 1.0"/></material>
+
+  <!-- ==================== base_footprint ==================== -->
+  <link name="base_footprint">
+    <visual><geometry><box size="0.001 0.001 0.001"/></geometry></visual>
+  </link>
+
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== base_link (chassis) =============== -->
+  <link name="base_link">
+    <inertial>
+      <mass value="${chassis_mass}"/>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <inertia
+        ixx="${chassis_mass/12*(chassis_width**2 + chassis_height**2)}" ixy="0" ixz="0"
+        iyy="${chassis_mass/12*(chassis_length**2 + chassis_height**2)}" iyz="0"
+        izz="${chassis_mass/12*(chassis_length**2 + chassis_width**2)}"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <geometry><box size="${chassis_length} ${chassis_width} ${chassis_height}"/></geometry>
+      <material name="body_blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <geometry><box size="${chassis_length} ${chassis_width} ${chassis_height}"/></geometry>
+    </collision>
+  </link>
+
+  <!-- ==================== Ackermann Wheel Macro ============= -->
+  <xacro:macro name="ackermann_wheel" params="prefix x y z is_front">
+    <link name="${prefix}_wheel_link">
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <inertia
+          ixx="${wheel_mass/12*(3*wheel_radius**2+wheel_width**2)}" ixy="0" ixz="0"
+          iyy="${wheel_mass/12*(3*wheel_radius**2+wheel_width**2)}" iyz="0"
+          izz="${wheel_mass/2*wheel_radius**2}"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="dark_grey"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      </collision>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child link="${prefix}_wheel_link"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.5" friction="0.8"/>
+      <limit effort="100" velocity="50"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:macro name="steering_wheel" params="prefix x y z">
+    <link name="${prefix}_wheel_link">
+      <inertial>
+        <mass value="${wheel_mass}"/>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <inertia
+          ixx="${wheel_mass/12*(3*wheel_radius**2+wheel_width**2)}" ixy="0" ixz="0"
+          iyy="${wheel_mass/12*(3*wheel_radius**2+wheel_width**2)}" iyz="0"
+          izz="${wheel_mass/2*wheel_radius**2}"/>
+      </inertial>
+      <visual>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="dark_grey"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      </collision>
+    </link>
+
+    <!-- Steering axis (vertical Z) -->
+    <joint name="${prefix}_steering_joint" type="revolute">
+      <parent link="base_link"/>
+      <child link="${prefix}_steering_knuckle"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="${-PI*30/180}" upper="${PI*30/180}" effort="20" velocity="5"/>
+    </joint>
+
+    <link name="${prefix}_steering_knuckle">
+      <visual><origin xyz="0 0 0" rpy="0 0 0"/><geometry><box size="0.04 0.04 0.04"/></geometry><material name="silver"/></visual>
+    </link>
+
+    <!-- Wheel rotation joint -->
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="${prefix}_steering_knuckle"/>
+      <child link="${prefix}_wheel_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.5" friction="0.8"/>
+      <limit effort="100" velocity="50"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- ==================== Rear Wheels (fixed) =============== -->
+  <xacro:ackermann_wheel prefix="rl" x="${-wheelbase/2}" y="${rear_track/2}" z="${-wheel_radius/2}" is_front="false"/>
+  <xacro:ackermann_wheel prefix="rr" x="${-wheelbase/2}" y="${-rear_track/2}" z="${-wheel_radius/2}" is_front="false"/>
+
+  <!-- ==================== Front Wheels (steering) =========== -->
+  <xacro:steering_wheel prefix="fl" x="${wheelbase/2}" y="${front_track/2}" z="${-wheel_radius/2}"/>
+  <xacro:steering_wheel prefix="fr" x="${wheelbase/2}" y="${-front_track/2}" z="${-wheel_radius/2}"/>
+
+  <!-- ==================== LiDAR Sensor ========================= -->
+  <link name="lidar_link">
+    <inertial>
+      <mass value="0.2"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.0005" ixy="0" ixz="0" iyy="0.0005" iyz="0" izz="0.0005"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.06" length="0.04"/></geometry>
+      <material name="lidar_white"/>
+    </visual>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+    <origin xyz="${chassis_length/2 - 0.15} 0 ${chassis_height + wheel_radius + 0.03}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== IMU Sensor ============================ -->
+  <link name="imu_link">
+    <inertial>
+      <mass value="0.01"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.03 0.03 0.01"/></geometry>
+      <material name="yellow"/>
+    </visual>
+  </link>
+
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+    <origin xyz="0 0 ${wheel_radius + chassis_height/2}" rpy="0 0 0"/>
+  </joint>
+
+</robot>
