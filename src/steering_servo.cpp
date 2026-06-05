@@ -11,13 +11,13 @@ SteeringServo::SteeringServo(const rclcpp::NodeOptions & options)
 
 CallbackReturn SteeringServo::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("pwm_pin", 12);
-  declare_parameter("pwm_chip", 0);
-  declare_parameter("center_pulse_us", 1500.0);
-  declare_parameter("range_pulse_us", 500.0);
-  declare_parameter("max_angle_rad", 0.52);
-  declare_parameter("min_angle_rad", -0.52);
-  declare_parameter("simulated", true);
+  declare_parameter<int>("pwm_pin");
+  declare_parameter<int>("pwm_chip");
+  declare_parameter<double>("center_pulse_us");
+  declare_parameter<double>("range_pulse_us");
+  declare_parameter<double>("max_angle_rad");
+  declare_parameter<double>("min_angle_rad");
+  declare_parameter<bool>("simulated");
 
   pwm_pin_ = get_parameter("pwm_pin").as_int();
   pwm_chip_ = get_parameter("pwm_chip").as_int();

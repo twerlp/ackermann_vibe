@@ -12,7 +12,7 @@ EncoderOdometry::EncoderOdometry(const rclcpp::NodeOptions & options)
 
 CallbackReturn EncoderOdometry::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("simulated", true);
+  declare_parameter<bool>("simulated");
   simulated_ = get_parameter("simulated").as_bool();
 
   odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("odom_raw", rclcpp::QoS(10).reliable());

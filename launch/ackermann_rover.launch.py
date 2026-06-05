@@ -2,6 +2,9 @@
 
 Jetson Nano rover: VESC motors + servo steering + LiDAR + IMU + wheel encoders
 
+All vehicle parameters come from config/rover_params.yaml — change one value there
+and every node, the visualizer, and the URDF model all update together.
+
 Usage:
   ros2 launch ackermann_rover ackermann_rover.launch.py
   ros2 launch ackermann_rover ackermann_rover.launch.py simulated:=false
@@ -10,6 +13,7 @@ Usage:
   ros2 launch ackermann_rover ackermann_rover.launch.py map_file:=/path/to/my_map.segments
 """
 import os
+import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
@@ -22,6 +26,32 @@ import lifecycle_msgs.msg
 
 _TRANSITION_CONFIGURE = lifecycle_msgs.msg.Transition.TRANSITION_CONFIGURE
 _TRANSITION_ACTIVATE = lifecycle_msgs.msg.Transition.TRANSITION_ACTIVATE
+
+
+def _load_params(share_dir):
+    """Load rover_params.yaml and return (shared_dict, node_dicts)."""
+    path = os.path.join(share_dir, "config", "rover_params.yaml")
+    with open(path, "r") as f:
+        raw = yaml.safe_load(f)
+    shared = raw.get("/**", {}).get("ros__parameters", {})
+    nodes = {}
+    for key, value in raw.items():
+        if key.startswith("/") and key != "/**":
+            nodes[key.lstrip("/")] = value.get("ros__parameters", {})
+    return shared, nodes
+
+
+def _xacro_command(share_dir, params):
+    """Build a Command that runs xacro with geometric params matching the YAML."""
+    xacro_path = os.path.join(share_dir, "urdf", "rover.urdf.xacro")
+    xacro_args = (
+        f"wheelbase:={params.get('wheelbase', 1.2)} "
+        f"track_width:={params.get('track_width', 0.8)} "
+        f"wheel_radius:={params.get('wheel_radius', 0.15)} "
+        f"chassis_length:={params.get('chassis_length', 1.6)} "
+        f"chassis_width:={params.get('chassis_width', 0.9)}"
+    )
+    return Command(["xacro ", xacro_args, " ", xacro_path])
 
 
 def _make_lifecycle_transitions(node_names):
@@ -40,13 +70,14 @@ def _make_lifecycle_transitions(node_names):
 
 
 def generate_launch_description() -> LaunchDescription:
+    pkg_name = "ackermann_rover"
+    share = get_package_share_directory(pkg_name)
+    shared, node_params = _load_params(share)
+
     simulated = LaunchConfiguration("simulated", default="true")
     use_rviz = LaunchConfiguration("rviz", default="false")
     use_visualizer = LaunchConfiguration("visualizer", default="true")
-    pkg_name = "ackermann_rover"
-    share = get_package_share_directory(pkg_name)
     default_map = os.path.join(share, "maps", "gym.segments")
-
     map_file = LaunchConfiguration("map_file", default=default_map)
 
     sim_arg = DeclareLaunchArgument(
@@ -72,12 +103,12 @@ def generate_launch_description() -> LaunchDescription:
         name="robot_state_publisher",
         output="screen",
         parameters=[{
-            "robot_description": Command([
-                "xacro ", os.path.join(share, "urdf", "rover.urdf.xacro")]),
+            "robot_description": _xacro_command(share, shared),
             "use_sim_time": False,
         }],
     )
-    # ── Joint State Bootstrap (zero states at startup, rover_controller overrides) ──
+
+    # ── Joint State Bootstrap ─────────────────────────────────
     joint_state_bootstrap = Node(
         package=pkg_name,
         executable="joint_state_bootstrap.py",
@@ -85,144 +116,86 @@ def generate_launch_description() -> LaunchDescription:
         output="screen",
     )
 
+    # Helper: merge shared params + node-specific params + extras
+    def _make_params(node_name, **extras):
+        result = [shared, node_params.get(node_name, {})]
+        if extras:
+            result.append(extras)
+        return result
+
     # ── Rover Controller ─────────────────────────────────────
     rover_controller = LifecycleNode(
-        package=pkg_name,
-        executable="rover_controller_node",
-        name="rover_controller",
-        namespace="",
-        output="screen",
-        parameters=[{"simulated": simulated}],
+        package=pkg_name, executable="rover_controller_node",
+        name="rover_controller", namespace="", output="screen",
+        parameters=_make_params("rover_controller", simulated=simulated),
     )
 
     # ── VESC Motor Driver ────────────────────────────────────
     vesc_driver = LifecycleNode(
-        package=pkg_name,
-        executable="vesc_driver_node",
-        name="vesc_driver",
-        namespace="",
-        output="screen",
-        parameters=[{
-            "simulated": simulated,
-            "serial_port": "/dev/vesc",
-            "baud_rate": 115200,
-            "max_duty": 0.95,
-            "max_current": 40.0,
-        }],
+        package=pkg_name, executable="vesc_driver_node",
+        name="vesc_driver", namespace="", output="screen",
+        parameters=_make_params("vesc_driver", simulated=simulated),
     )
 
     # ── Steering Servo ───────────────────────────────────────
     steering_servo = LifecycleNode(
-        package=pkg_name,
-        executable="steering_servo_node",
-        name="steering_servo",
-        namespace="",
-        output="screen",
-        parameters=[{
-            "simulated": simulated,
-            "pwm_pin": 12,
-            "max_angle_rad": 0.52,
-            "min_angle_rad": -0.52,
-            "center_pulse_us": 1500.0,
-            "range_pulse_us": 500.0,
-        }],
+        package=pkg_name, executable="steering_servo_node",
+        name="steering_servo", namespace="", output="screen",
+        parameters=_make_params("steering_servo", simulated=simulated),
     )
 
     # ── Encoder Odometry ─────────────────────────────────────
     encoder_odometry = LifecycleNode(
-        package=pkg_name,
-        executable="encoder_odometry_node",
-        name="encoder_odometry",
-        namespace="",
-        output="screen",
-        parameters=[{
-            "simulated": simulated,
-            "wheel_radius": 0.15,
-            "wheelbase": 1.2,
-            "track_width": 0.8,
-            "max_steering_angle": 0.52,
-            "ticks_per_rev": 1024,
-            "odom_rate": 50.0,
-        }],
+        package=pkg_name, executable="encoder_odometry_node",
+        name="encoder_odometry", namespace="", output="screen",
+        parameters=_make_params("encoder_odometry", simulated=simulated),
     )
 
     # ── LiDAR Driver ─────────────────────────────────────────
     lidar_driver = LifecycleNode(
-        package=pkg_name,
-        executable="lidar_driver_node",
-        name="lidar_driver",
-        namespace="",
-        output="screen",
-        parameters=[{
-            "simulated": simulated,
-            "serial_port": "/dev/lidar",
-            "baud_rate": 230400,
-            "scan_rate": 10.0,
-            "range_min": 0.12,
-            "range_max": 12.0,
-            "num_samples": 360,
-            "map_file": map_file,
-        }],
+        package=pkg_name, executable="lidar_driver_node",
+        name="lidar_driver", namespace="", output="screen",
+        parameters=_make_params("lidar_driver",
+                                simulated=simulated, map_file=map_file),
     )
 
     # ── IMU Driver ───────────────────────────────────────────
     imu_driver = LifecycleNode(
-        package=pkg_name,
-        executable="imu_driver_node",
-        name="imu_driver",
-        namespace="",
-        output="screen",
-        parameters=[{
-            "simulated": simulated,
-            "i2c_device": "/dev/i2c-1",
-            "i2c_address": 0x68,
-            "imu_rate": 100.0,
-            "frame_id": "imu_link",
-        }],
+        package=pkg_name, executable="imu_driver_node",
+        name="imu_driver", namespace="", output="screen",
+        parameters=_make_params("imu_driver", simulated=simulated),
     )
 
     # ── RViz2 (optional) ─────────────────────────────────────
     rviz_node = Node(
-        package="rviz2",
-        executable="rviz2",
-        name="rviz2",
+        package="rviz2", executable="rviz2", name="rviz2",
         condition=IfCondition(use_rviz),
         arguments=["-d", os.path.join(share, "config", "rover.rviz")],
         output="screen",
     )
 
-    # ── 2D Visualizer (lightweight, no Gazebo needed) ─────────
+    # ── 2D Visualizer ────────────────────────────────────────
     visualizer_node = Node(
-        package=pkg_name,
-        executable="rover_visualizer.py",
+        package=pkg_name, executable="rover_visualizer.py",
         name="rover_visualizer",
         condition=IfCondition(use_visualizer),
         output="screen",
-        parameters=[{"map_file": map_file}],
+        parameters=_make_params("rover_visualizer", map_file=map_file),
     )
 
-    # ── Lifecycle transitions (configure then activate) ──────
+    # ── Lifecycle transitions ────────────────────────────────
     lifecycle_node_names = [
         "rover_controller", "vesc_driver", "steering_servo",
         "encoder_odometry", "lidar_driver", "imu_driver",
     ]
-    configure_timer, activate_timer = _make_lifecycle_transitions(lifecycle_node_names)
+    configure_timer, activate_timer = _make_lifecycle_transitions(
+        lifecycle_node_names)
 
     return LaunchDescription([
-        sim_arg,
-        rviz_arg,
-        viz_arg,
-        map_arg,
-        robot_state_pub,
-        joint_state_bootstrap,
-        rover_controller,
-        vesc_driver,
-        steering_servo,
-        encoder_odometry,
-        lidar_driver,
-        imu_driver,
-        rviz_node,
-        visualizer_node,
-        configure_timer,
-        activate_timer,
+        sim_arg, rviz_arg, viz_arg, map_arg,
+        robot_state_pub, joint_state_bootstrap,
+        rover_controller, vesc_driver, steering_servo,
+        encoder_odometry, lidar_driver, imu_driver,
+        rviz_node, visualizer_node,
+        configure_timer, activate_timer,
     ])

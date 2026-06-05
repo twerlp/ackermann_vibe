@@ -37,12 +37,11 @@ protected:
 private:
   void readLidarData();
   void odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg);
-  void buildGymMap();
+  void loadSegmentsFromFile(const std::string & path);
   double rayCast(double lx, double ly, double angle) const;
   double raySegmentIntersect(double ox, double oy, double dx, double dy,
                               double x1, double y1, double x2, double y2) const;
   void publishObstacleMarkers();
-  void loadSegmentsFromFile(const std::string & path);
 
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<sensor_msgs::msg::LaserScan>> scan_pub_;
   std::shared_ptr<rclcpp_lifecycle::LifecyclePublisher<visualization_msgs::msg::MarkerArray>> marker_pub_;

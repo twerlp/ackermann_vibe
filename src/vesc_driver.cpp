@@ -11,13 +11,12 @@ VescDriver::VescDriver(const rclcpp::NodeOptions & options)
 
 CallbackReturn VescDriver::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("serial_port", "/dev/vesc");
-  declare_parameter("baud_rate", 115200);
-  declare_parameter("vesc_id", 0);
-  declare_parameter("max_duty", 0.95);
-  declare_parameter("max_current", 40.0);
-  declare_parameter("motor_poles", 14.0);
-  declare_parameter("simulated", true);
+  declare_parameter<std::string>("serial_port");
+  declare_parameter<int>("baud_rate");
+  declare_parameter<int>("vesc_id");
+  declare_parameter<double>("max_duty");
+  declare_parameter<double>("max_current");
+  declare_parameter<bool>("simulated");
 
   serial_port_ = get_parameter("serial_port").as_string();
   baud_rate_ = get_parameter("baud_rate").as_int();

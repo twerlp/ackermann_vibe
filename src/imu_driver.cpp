@@ -12,13 +12,11 @@ ImuDriver::ImuDriver(const rclcpp::NodeOptions & options)
 
 CallbackReturn ImuDriver::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("i2c_device", "/dev/i2c-1");
-  declare_parameter("i2c_address", 0x68);
-  declare_parameter("imu_rate", 100.0);
-  declare_parameter("frame_id", "imu_link");
-  declare_parameter("accel_scale", 16384.0);
-  declare_parameter("gyro_scale", 131.0);
-  declare_parameter("simulated", true);
+  declare_parameter<std::string>("i2c_device");
+  declare_parameter<int>("i2c_address");
+  declare_parameter<double>("imu_rate");
+  declare_parameter<std::string>("frame_id");
+  declare_parameter<bool>("simulated");
 
   i2c_device_ = get_parameter("i2c_device").as_string();
   i2c_address_ = static_cast<uint8_t>(get_parameter("i2c_address").as_int());

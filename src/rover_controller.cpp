@@ -13,13 +13,13 @@ RoverController::RoverController(const rclcpp::NodeOptions & options)
 
 CallbackReturn RoverController::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("wheelbase", 1.2);
-  declare_parameter("track_width", 0.8);
-  declare_parameter("wheel_radius", 0.15);
-  declare_parameter("max_steering_angle", 0.52);
-  declare_parameter("max_motor_speed", 6000.0);
-  declare_parameter("max_forward_speed", 5.0);
-  declare_parameter("max_reverse_speed", 2.0);
+  declare_parameter<double>("wheelbase");
+  declare_parameter<double>("track_width");
+  declare_parameter<double>("wheel_radius");
+  declare_parameter<double>("max_steering_angle");
+  declare_parameter<double>("max_motor_speed");
+  declare_parameter<double>("max_forward_speed");
+  declare_parameter<double>("max_reverse_speed");
 
   wheelbase_ = get_parameter("wheelbase").as_double();
   track_width_ = get_parameter("track_width").as_double();

@@ -21,8 +21,7 @@ import math
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon as MplPolygon
-from matplotlib.widgets import Button, RadioButtons
+from matplotlib.widgets import Button
 
 
 class MapEditor:

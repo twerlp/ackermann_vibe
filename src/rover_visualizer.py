@@ -12,13 +12,12 @@ Usage:
 """
 import math
 import os
-import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import Twist, PoseStamped, Point, Quaternion
+from geometry_msgs.msg import Twist, PoseStamped
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
@@ -58,6 +57,8 @@ class RoverVisualizer(Node):
         self.declare_parameter('chassis_width', 0.9)
         self.declare_parameter('wheel_radius', 0.15)
         self.declare_parameter('max_steering_angle', 0.52)
+        self.declare_parameter('lidar_offset_x', 0.65)
+        self.declare_parameter('lidar_offset_y', 0.0)
         self.declare_parameter('map_file', '')
 
         self.wheelbase = self.get_parameter('wheelbase').value
@@ -66,6 +67,8 @@ class RoverVisualizer(Node):
         self.chassis_w = self.get_parameter('chassis_width').value
         self.wheel_r = self.get_parameter('wheel_radius').value
         self.max_steer = self.get_parameter('max_steering_angle').value
+        self.lidar_off_x = self.get_parameter('lidar_offset_x').value
+        self.lidar_off_y = self.get_parameter('lidar_offset_y').value
         map_file = self.get_parameter('map_file').value
         self.obstacles = _load_segments(map_file) if map_file else []
 
@@ -88,7 +91,7 @@ class RoverVisualizer(Node):
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.scan_sub = self.create_subscription(
             LaserScan, '/scan', self.scan_callback,
-            QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT))
+            QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
         self.cmd_sub = self.create_subscription(
             Twist, '/cmd_vel', self.cmd_callback,
             QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE))
@@ -193,13 +196,15 @@ class RoverVisualizer(Node):
     def _draw_lidar_scans(self, cx, cy, theta):
         if not self.scan_ranges:
             return
+        lx = cx + self.lidar_off_x * math.cos(theta) - self.lidar_off_y * math.sin(theta)
+        ly = cy + self.lidar_off_x * math.sin(theta) + self.lidar_off_y * math.cos(theta)
         xs, ys = [], []
         for i, r in enumerate(self.scan_ranges):
             if r <= 0.01 or r > 100:
                 continue
             angle = self.scan_angle_min + i * self.scan_angle_inc + theta
-            xs.append(cx + r * math.cos(angle))
-            ys.append(cy + r * math.sin(angle))
+            xs.append(lx + r * math.cos(angle))
+            ys.append(ly + r * math.sin(angle))
         if xs:
             self.ax.scatter(xs, ys, s=1, c='lime', alpha=0.4, marker='.')
 

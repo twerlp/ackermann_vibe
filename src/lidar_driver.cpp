@@ -15,19 +15,19 @@ LidarDriver::LidarDriver(const rclcpp::NodeOptions & options)
 
 CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
 {
-  declare_parameter("serial_port", "/dev/lidar");
-  declare_parameter("baud_rate", 230400);
-  declare_parameter("scan_rate", 10.0);
-  declare_parameter("range_min", 0.12);
-  declare_parameter("range_max", 12.0);
-  declare_parameter("angle_min", -M_PI);
-  declare_parameter("angle_max", M_PI);
-  declare_parameter("num_samples", 360);
-  declare_parameter("frame_id", "lidar_link");
-  declare_parameter("simulated", true);
-  declare_parameter("map_file", "");
-  declare_parameter("lidar_offset_x", 0.65);
-  declare_parameter("lidar_offset_y", 0.0);
+  declare_parameter<std::string>("serial_port");
+  declare_parameter<int>("baud_rate");
+  declare_parameter<double>("scan_rate");
+  declare_parameter<double>("range_min");
+  declare_parameter<double>("range_max");
+  declare_parameter<double>("angle_min");
+  declare_parameter<double>("angle_max");
+  declare_parameter<int>("num_samples");
+  declare_parameter<std::string>("frame_id");
+  declare_parameter<bool>("simulated");
+  declare_parameter<std::string>("map_file");
+  declare_parameter<double>("lidar_offset_x");
+  declare_parameter<double>("lidar_offset_y");
 
   serial_port_ = get_parameter("serial_port").as_string();
   baud_rate_ = get_parameter("baud_rate").as_int();
@@ -45,8 +45,11 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
 
   angle_increment_ = (angle_max_ - angle_min_) / num_samples_;
 
+  // Note: ros2-qos-checker skill recommends BEST_EFFORT for sensors,
+  // but RViz2 in Humble defaults to RELIABLE and its Reliability Policy
+  // config field is not reliably honored. Use RELIABLE for compatibility.
   scan_pub_ = create_publisher<sensor_msgs::msg::LaserScan>(
-    "scan", rclcpp::QoS(10).best_effort());
+    "scan", rclcpp::QoS(10).reliable());
 
   if (simulated_) {
     marker_pub_ = create_publisher<visualization_msgs::msg::MarkerArray>(
@@ -58,8 +61,6 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
 
     if (!map_file_.empty()) {
       loadSegmentsFromFile(map_file_);
-    } else {
-      buildDefaultGymMap();
     }
     RCLCPP_WARN(get_logger(), "LiDAR running in simulated mode with %zu obstacles",
       obstacles_.size());
@@ -99,6 +100,7 @@ CallbackReturn LidarDriver::on_activate(const rclcpp_lifecycle::State &)
 CallbackReturn LidarDriver::on_deactivate(const rclcpp_lifecycle::State &)
 {
   read_timer_->cancel();
+  if (marker_timer_) marker_timer_->cancel();
   scan_pub_->on_deactivate();
   if (simulated_) marker_pub_->on_deactivate();
 
@@ -122,6 +124,7 @@ CallbackReturn LidarDriver::on_cleanup(const rclcpp_lifecycle::State &)
 CallbackReturn LidarDriver::on_shutdown(const rclcpp_lifecycle::State &)
 {
   if (read_timer_) read_timer_->cancel();
+  if (marker_timer_) marker_timer_->cancel();
   if (!simulated_ && serial_fd_ >= 0) serial_fd_ = -1;
   RCLCPP_INFO(get_logger(), "LidarDriver shutdown");
   return CallbackReturn::SUCCESS;
@@ -135,40 +138,6 @@ void LidarDriver::odomCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
   double qw = msg->pose.pose.orientation.w;
   odom_theta_ = std::atan2(2.0 * qw * qz, 1.0 - 2.0 * qz * qz);
   has_odom_ = true;
-}
-
-void LidarDriver::buildDefaultGymMap()
-{
-  const double X = 4.0, Y = 4.0;
-  obstacles_.clear();
-
-  // Outer walls — 8x8m room centered at origin
-  obstacles_.push_back({-X, -Y,  X, -Y});
-  obstacles_.push_back({ X, -Y,  X,  Y});
-  obstacles_.push_back({ X,  Y, -X,  Y});
-  obstacles_.push_back({-X,  Y, -X, -Y});
-
-  // Box at upper-right (2, 2), 1m x 0.6m
-  obstacles_.push_back({ 1.7,  1.7,  2.7,  1.7});
-  obstacles_.push_back({ 2.7,  1.7,  2.7,  2.3});
-  obstacles_.push_back({ 2.7,  2.3,  1.7,  2.3});
-  obstacles_.push_back({ 1.7,  2.3,  1.7,  1.7});
-
-  // Box at lower-left (-2, -2.5), 1.2m x 0.8m
-  obstacles_.push_back({-2.6, -2.9, -1.4, -2.9});
-  obstacles_.push_back({-1.4, -2.9, -1.4, -2.1});
-  obstacles_.push_back({-1.4, -2.1, -2.6, -2.1});
-  obstacles_.push_back({-2.6, -2.1, -2.6, -2.9});
-
-  // Small box at (0.5, -1), 0.6m x 0.4m
-  obstacles_.push_back({ 0.2, -1.2,  0.8, -1.2});
-  obstacles_.push_back({ 0.8, -1.2,  0.8, -0.8});
-  obstacles_.push_back({ 0.8, -0.8,  0.2, -0.8});
-  obstacles_.push_back({ 0.2, -0.8,  0.2, -1.2});
-
-  // Long wall segment in the middle (vertical barrier leaving gaps)
-  obstacles_.push_back({-0.2, -1.5, -0.2,  0.5});
-  obstacles_.push_back({-0.2,  2.0, -0.2,  3.5});
 }
 
 double LidarDriver::raySegmentIntersect(double ox, double oy, double dx, double dy,
