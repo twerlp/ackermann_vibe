@@ -45,9 +45,12 @@ CallbackReturn LidarDriver::on_configure(const rclcpp_lifecycle::State &)
 
   angle_increment_ = (angle_max_ - angle_min_) / num_samples_;
 
-  // Note: ros2-qos-checker skill recommends BEST_EFFORT for sensors,
-  // but RViz2 in Humble defaults to RELIABLE and its Reliability Policy
-  // config field is not reliably honored. Use RELIABLE for compatibility.
+  // The ros2-qos-checker skill says sensor data should use BEST_EFFORT,
+  // but a confirmed unfixed DDS-level bug (ros2/ros2#1434) causes a
+  // RELIABLE publisher to BLOCK for a BEST_EFFORT subscriber across all
+  // RMW implementations (FastDDS, CycloneDDS, RTI Connext) and distros
+  // (Foxy through Rolling). The only viable workaround is matching QoS:
+  // since RViz2 defaults to RELIABLE, we publish RELIABLE too.
   scan_pub_ = create_publisher<sensor_msgs::msg::LaserScan>(
     "scan", rclcpp::QoS(10).reliable());
 
